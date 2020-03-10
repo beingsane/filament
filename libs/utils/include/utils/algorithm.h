@@ -19,7 +19,8 @@
 
 #include <utils/compiler.h>
 
-#include <functional>
+#include <functional>       // for std::less
+#include <type_traits>      // for std::enable_if
 
 #include <limits.h>
 #include <stdint.h>
@@ -27,46 +28,61 @@
 namespace utils {
 
 namespace details {
+
 template<typename T>
 constexpr inline T popcount(T v) noexcept {
     static_assert(sizeof(T) * 8 <= 128, "details::popcount() only support up to 128 bits");
     constexpr T ONES = ~T(0);
-    v = v - ((v >> 1) & ONES / 3);
-    v = (v & ONES / 15 * 3) + ((v >> 2) & ONES / 15 * 3);
-    v = (v + (v >> 4)) & ONES / 255 * 15;
+    v = v - ((v >> 1u) & ONES / 3);
+    v = (v & ONES / 15 * 3) + ((v >> 2u) & ONES / 15 * 3);
+    v = (v + (v >> 4u)) & ONES / 255 * 15;
     return (T) (v * (ONES / 255)) >> (sizeof(T) - 1) * CHAR_BIT;
 }
 
-template<typename T>
-constexpr inline T clz(T x) noexcept {
-    static_assert(sizeof(T) <= sizeof(uint64_t), "details::clz() only support up to 64 bits");
-    x |= (x >> 1);
-    x |= (x >> 2);
-    x |= (x >> 4);
-    x |= (x >> 8);
-    x |= (x >> 16);
-    if (sizeof(T) * 8 > 32) { // if() only needed to quash compiler warnings
-        x |= (x >> 32);
-    }
-    return (sizeof(T) * CHAR_BIT) - details::popcount(x);
+constexpr inline uint32_t clz(uint32_t x) noexcept {
+    x |= (x >> 1u);
+    x |= (x >> 2u);
+    x |= (x >> 4u);
+    x |= (x >> 8u);
+    x |= (x >> 16u);
+    return 32u - details::popcount(x);
 }
 
-template<typename T>
-constexpr inline T ctz(T x) noexcept {
-    static_assert(sizeof(T) <= sizeof(uint64_t), "details::ctz() only support up to 64 bits");
-    T c = sizeof(T) * 8;
-    x &= -signed(x);
+constexpr inline uint64_t clz(uint64_t x) noexcept {
+    x |= (x >> 1u);
+    x |= (x >> 2u);
+    x |= (x >> 4u);
+    x |= (x >> 8u);
+    x |= (x >> 16u);
+    x |= (x >> 32u);
+    return 64u - details::popcount(x);
+}
+
+constexpr inline uint32_t ctz(uint32_t x) noexcept {
+    uint32_t c = 32;
+    x &= -x;
     if (x) c--;
-    if (sizeof(T) * 8 > 32) { // if() only needed to quash compiler warnings
-        if (x & 0x00000000FFFFFFFF) c -= 32;
-    }
-    if (x & 0x0000FFFF) c -= 16;
-    if (x & 0x00FF00FF) c -= 8;
-    if (x & 0x0F0F0F0F) c -= 4;
-    if (x & 0x33333333) c -= 2;
-    if (x & 0x55555555) c -= 1;
+    if (x & 0x0000FFFFu) c -= 16;
+    if (x & 0x00FF00FFu) c -= 8;
+    if (x & 0x0F0F0F0Fu) c -= 4;
+    if (x & 0x33333333u) c -= 2;
+    if (x & 0x55555555u) c -= 1;
     return c;
 }
+
+constexpr inline uint64_t ctz(uint64_t x) noexcept {
+    uint32_t c = 64;
+    x &= -x;
+    if (x) c--;
+    if (x & 0x00000000FFFFFFFFu) c -= 32;
+    if (x & 0x0000FFFF0000FFFFu) c -= 16;
+    if (x & 0x00FF00FF00FF00FFu) c -= 8;
+    if (x & 0x0F0F0F0F0F0F0F0Fu) c -= 4;
+    if (x & 0x3333333333333333u) c -= 2;
+    if (x & 0x5555555555555555u) c -= 1;
+    return c;
+}
+
 } // namespace details
 
 constexpr inline UTILS_PUBLIC UTILS_PURE
@@ -249,8 +265,8 @@ RandomAccessIterator partition_point(
         // The number of repetitions here doesn't affect the result. We manually unroll the loop
         // twice, to guarantee we have at least two iterations without branches (for the case
         // where the size is not known at compile time
-        first += pred(first[len>>=1]) ? len : 0;
-        first += pred(first[len>>=1]) ? len : 0;
+        first += pred(first[len>>=1u]) ? len : 0;
+        first += pred(first[len>>=1u]) ? len : 0;
     }
     first += pred(*first);
     return first;
